@@ -6,6 +6,15 @@ const {
   getUserById,
   updateUserStatus,
 } = require('../../controllers/admin/adminUser.controller');
+const {
+  getAllStrategies,
+  updateStrategyStatus,
+} = require('../../controllers/admin/adminStrategy.controller');
+const {
+  getAllDeployments,
+  executeEmergencyKillSwitch,
+} = require('../../controllers/admin/adminTrading.controller');
+const { getAllOrders } = require('../../controllers/admin/adminOrder.controller');
 const { protect, restrictTo } = require('../../middlewares/auth.middleware');
 
 const router = express.Router();
@@ -24,5 +33,16 @@ router.get('/dashboard', getDashboardStats);
 router.get('/users', getAllUsers);
 router.get('/users/:id', getUserById);
 router.patch('/users/:id/status', updateUserStatus);
+
+// Strategy Management
+router.get('/strategies', getAllStrategies);
+router.patch('/strategies/:id/status', updateStrategyStatus);
+
+// Live Trading & Deployment Monitor
+router.get('/deployments', getAllDeployments);
+router.post('/kill-switch', executeEmergencyKillSwitch);
+
+// Orders Monitor
+router.get('/orders', getAllOrders);
 
 module.exports = router;

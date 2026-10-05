@@ -45,8 +45,67 @@ enum AuditAction {
   BROKER_CONNECT
   BROKER_DISCONNECT
   STRATEGY_CREATE
+  STRATEGY_UPDATE
+  STRATEGY_DEPLOY
   ORDER_PLACED
   KILL_SWITCH_TRIGGERED
+}
+
+enum StrategyStatus {
+  DRAFT
+  PUBLISHED
+  SUSPENDED
+  ARCHIVED
+}
+
+enum StrategyVisibility {
+  PRIVATE
+  PUBLIC
+  MARKETPLACE
+}
+
+enum DeploymentMode {
+  PAPER
+  LIVE
+}
+
+enum DeploymentStatus {
+  ACTIVE
+  PAUSED
+  STOPPED
+  ERROR
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  SL
+  SL_M
+}
+
+enum OrderStatus {
+  PENDING
+  OPEN
+  FILLED
+  CANCELLED
+  REJECTED
+}
+
+enum PositionStatus {
+  OPEN
+  CLOSED
+}
+
+enum BacktestStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
 }
 
 // -------------------------------------------------------------
@@ -69,13 +128,18 @@ model User {
   // Relations
   sessions         UserSession[]
   brokerAccounts   BrokerAccount[]
+  strategies       Strategy[]
+  deployments      Deployment[]
+  orders           Order[]
+  positions        Position[]
+  backtests        Backtest[]
   auditLogs        AuditLog[]
 
   @@map("users")
 }
 
 // -------------------------------------------------------------
-// 2. USER SESSIONS TABLE (For JWT Refresh Tokens & Multi-device)
+// 2. USER SESSIONS TABLE
 // -------------------------------------------------------------
 model UserSession {
   id               String    @id @default(uuid())
@@ -87,7 +151,6 @@ model UserSession {
   revokedAt        DateTime? @map("revoked_at")
   createdAt        DateTime  @default(now()) @map("created_at")
 
-  // Relation with User
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -95,26 +158,27 @@ model UserSession {
 }
 
 // -------------------------------------------------------------
-// 3. BROKER ACCOUNTS TABLE (Encrypted credentials at rest)
+// 3. BROKER ACCOUNTS TABLE
 // -------------------------------------------------------------
 model BrokerAccount {
-  id                   String       @id @default(uuid())
-  userId               String       @map("user_id")
-  brokerCode           BrokerCode   @map("broker_code")
-  accountRef           String       @map("account_ref") // Client ID (e.g. ZER1234, 458921)
-  apiKeyEncrypted      String?      @map("api_key_encrypted")
-  apiSecretEncrypted   String?      @map("api_secret_encrypted")
-  accessTokenEncrypted String?      @map("access_token_encrypted")
-  tokenExpiresAt       DateTime?    @map("token_expires_at")
-  status               BrokerStatus @default(DISCONNECTED)
-  lastSyncAt           DateTime?    @map("last_sync_at")
-  errorMessage         String?      @map("error_message")
+  id                   String        @id @default(uuid())
+  userId               String        @map("user_id")
+  brokerCode           BrokerCode    @map("broker_code")
+  accountRef           String        @map("account_ref")
+  apiKeyEncrypted      String?       @map("api_key_encrypted")
+  apiSecretEncrypted   String?       @map("api_secret_encrypted")
+  accessTokenEncrypted String?       @map("access_token_encrypted")
+  tokenExpiresAt       DateTime?     @map("token_expires_at")
+  status               BrokerStatus  @default(DISCONNECTED)
+  lastSyncAt           DateTime?     @map("last_sync_at")
+  errorMessage         String?       @map("error_message")
   metadata             Json?
-  createdAt            DateTime     @default(now()) @map("created_at")
-  updatedAt            DateTime     @updatedAt @map("updated_at")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
 
-  // Relation with User
-  user                 User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deployments          Deployment[]
+  orders               Order[]
 
   @@unique([userId, brokerCode, accountRef])
   @@index([userId])
@@ -122,20 +186,183 @@ model BrokerAccount {
 }
 
 // -------------------------------------------------------------
-// 4. AUDIT LOGS TABLE (Immutable Trail for Operations & Safety)
+// 4. STRATEGIES TABLE
+// -------------------------------------------------------------
+model Strategy {
+  id               String             @id @default(uuid())
+  ownerId          String             @map("owner_id")
+  name             String
+  description      String?
+  category         String             @default("EQUITY") // EQUITY, OPTIONS, FUTURES, COMMODITY
+  visibility       StrategyVisibility @default(PRIVATE)
+  status           StrategyStatus     @default(DRAFT)
+  currentVersionNo Int                @default(1) @map("current_version_no")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  owner            User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  versions         StrategyVersion[]
+  deployments      Deployment[]
+  backtests        Backtest[]
+
+  @@index([ownerId])
+  @@index([visibility, status])
+  @@map("strategies")
+}
+
+// -------------------------------------------------------------
+// 5. STRATEGY VERSIONS TABLE (Immutable JSON Schema)
+// -------------------------------------------------------------
+model StrategyVersion {
+  id          String       @id @default(uuid())
+  strategyId  String       @map("strategy_id")
+  versionNo   Int          @map("version_no")
+  schemaJson  Json         @map("schema_json") // No-code conditions, indicators, legs, risk rules
+  checksum    String?
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  strategy    Strategy     @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  deployments Deployment[]
+  backtests   Backtest[]
+
+  @@unique([strategyId, versionNo])
+  @@index([strategyId])
+  @@map("strategy_versions")
+}
+
+// -------------------------------------------------------------
+// 6. DEPLOYMENTS TABLE (Active Strategy Instances)
+// -------------------------------------------------------------
+model Deployment {
+  id                String           @id @default(uuid())
+  userId            String           @map("user_id")
+  strategyId        String           @map("strategy_id")
+  strategyVersionId String           @map("strategy_version_id")
+  brokerAccountId   String?          @map("broker_account_id")
+  mode              DeploymentMode   @default(PAPER)
+  status            DeploymentStatus @default(ACTIVE)
+  capital           Float            @default(100000.0)
+  multiplier        Float            @default(1.0)
+  riskConfig        Json?            @map("risk_config") // SL, Target, Trailing SL, Max Loss
+  lastExecutionAt   DateTime?        @map("last_execution_at")
+  errorMessage      String?          @map("error_message")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy          Strategy         @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  strategyVersion   StrategyVersion  @relation(fields: [strategyVersionId], references: [id], onDelete: Cascade)
+  brokerAccount     BrokerAccount?   @relation(fields: [brokerAccountId], references: [id], onDelete: SetNull)
+  orders            Order[]
+  positions         Position[]
+
+  @@index([userId])
+  @@index([status, mode])
+  @@map("deployments")
+}
+
+// -------------------------------------------------------------
+// 7. ORDERS TABLE (Paper & Live Execution)
+// -------------------------------------------------------------
+model Order {
+  id              String         @id @default(uuid())
+  deploymentId    String?        @map("deployment_id")
+  userId          String         @map("user_id")
+  brokerAccountId String?        @map("broker_account_id")
+  brokerOrderId   String?        @map("broker_order_id")
+  symbol          String
+  exchange        String         @default("NSE")
+  side            OrderSide
+  type            OrderType      @default(MARKET)
+  quantity        Int
+  price           Float          @default(0.0)
+  filledPrice     Float?         @map("filled_price")
+  filledQuantity  Int            @default(0) @map("filled_quantity")
+  status          OrderStatus    @default(PENDING)
+  mode            DeploymentMode @default(PAPER)
+  rejectionReason String?        @map("rejection_reason")
+  idempotencyKey  String?        @unique @map("idempotency_key")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  deployment      Deployment?    @relation(fields: [deploymentId], references: [id], onDelete: SetNull)
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brokerAccount   BrokerAccount? @relation(fields: [brokerAccountId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([deploymentId])
+  @@index([status])
+  @@map("orders")
+}
+
+// -------------------------------------------------------------
+// 8. POSITIONS TABLE (Real-time P&L Tracking)
+// -------------------------------------------------------------
+model Position {
+  id            String         @id @default(uuid())
+  userId        String         @map("user_id")
+  deploymentId  String?        @map("deployment_id")
+  symbol        String
+  exchange      String         @default("NSE")
+  quantity      Int            @default(0)
+  avgPrice      Float          @default(0.0) @map("avg_price")
+  ltp           Float          @default(0.0) // Last Traded Price
+  realizedPnl   Float          @default(0.0) @map("realized_pnl")
+  unrealizedPnl Float          @default(0.0) @map("unrealized_pnl")
+  status        PositionStatus @default(OPEN)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deployment    Deployment?    @relation(fields: [deploymentId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([deploymentId])
+  @@map("positions")
+}
+
+// -------------------------------------------------------------
+// 9. BACKTESTS TABLE (Historical Simulation)
+// -------------------------------------------------------------
+model Backtest {
+  id                String          @id @default(uuid())
+  userId            String          @map("user_id")
+  strategyId        String          @map("strategy_id")
+  strategyVersionId String          @map("strategy_version_id")
+  startDate         DateTime        @map("start_date")
+  endDate           DateTime        @map("end_date")
+  initialCapital    Float           @default(100000.0) @map("initial_capital")
+  netPnl            Float           @default(0.0) @map("net_pnl")
+  winRate           Float           @default(0.0) @map("win_rate")
+  maxDrawdown       Float           @default(0.0) @map("max_drawdown")
+  totalTrades       Int             @default(0) @map("total_trades")
+  metricsJson       Json?           @map("metrics_json") // Sharpe, Profit Factor, Trade Log
+  status            BacktestStatus  @default(PENDING)
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy          Strategy        @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  strategyVersion   StrategyVersion @relation(fields: [strategyVersionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([strategyId])
+  @@map("backtests")
+}
+
+// -------------------------------------------------------------
+// 10. AUDIT LOGS TABLE
 // -------------------------------------------------------------
 model AuditLog {
   id         String      @id @default(uuid())
   actorId    String?     @map("actor_id")
   role       UserRole?
   action     AuditAction
-  entity     String      // e.g. 'USER', 'BROKER_ACCOUNT', 'ORDER'
+  entity     String
   entityId   String?     @map("entity_id")
-  details    Json?       // Snapshot / request metadata
+  details    Json?
   ipAddress  String?     @map("ip_address")
   createdAt  DateTime    @default(now()) @map("created_at")
 
-  // Relation
   user       User?       @relation(fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([actorId])
