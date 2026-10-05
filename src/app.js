@@ -34,9 +34,12 @@ const tradingRoutes = require('./routes/user/trading.routes');
 const orderRoutes = require('./routes/user/order.routes');
 const backtestRoutes = require('./routes/user/backtest.routes');
 
+const marketRoutes = require('./routes/user/market.routes');
+
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/strategies', strategyRoutes);
 app.use('/api/v1/backtests', backtestRoutes);
+app.use('/api/v1/market', marketRoutes);
 app.use('/api/v1', brokerRoutes);
 app.use('/api/v1', tradingRoutes);
 app.use('/api/v1', orderRoutes);
