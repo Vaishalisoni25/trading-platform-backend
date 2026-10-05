@@ -8,10 +8,9 @@ const { protect } = require('../../middlewares/auth.middleware');
 
 const router = express.Router();
 
-router.use(protect);
-
-router.post('/orders', placeManualOrder);
-router.get('/orders', getOrders);
-router.get('/positions', getPositions);
+// Removed router.use(protect) to prevent middleware leakage to other /api/v1 routes
+router.post('/orders', protect, placeManualOrder);
+router.get('/orders', protect, getOrders);
+router.get('/positions', protect, getPositions);
 
 module.exports = router;
