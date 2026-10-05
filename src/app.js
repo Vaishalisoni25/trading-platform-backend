@@ -26,8 +26,11 @@ app.get('/', (req, res) => {
   });
 });
 
-// Future API routes mount point:
-// app.use('/api/v1', userRoutes);
+// API Routes
+const authRoutes = require('./routes/user/auth.routes');
+app.use('/api/v1/auth', authRoutes);
+
+// Admin Routes (Placeholder for next phase)
 // app.use('/api/v1/admin', adminRoutes);
 
 // 404 Not Found Handler
