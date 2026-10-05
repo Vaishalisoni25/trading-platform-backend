@@ -26,12 +26,16 @@ app.get('/', (req, res) => {
   });
 });
 
-// API Routes
+// API Routes - User Side (Mobile App & Web App)
 const authRoutes = require('./routes/user/auth.routes');
-app.use('/api/v1/auth', authRoutes);
+const brokerRoutes = require('./routes/user/broker.routes');
 
-// Admin Routes (Placeholder for next phase)
-// app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1', brokerRoutes);
+
+// API Routes - Admin Side (Admin Panel)
+const adminRoutes = require('./routes/admin/admin.routes');
+app.use('/api/v1/admin', adminRoutes);
 
 // 404 Not Found Handler
 app.use((req, res, next) => {

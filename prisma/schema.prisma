@@ -7,7 +7,7 @@ datasource db {
 }
 
 // -------------------------------------------------------------
-// ENUMS (User Roles & Status)
+// ENUMS
 // -------------------------------------------------------------
 enum UserRole {
   USER          // Retail Trader / Client
@@ -23,25 +23,53 @@ enum UserStatus {
   PENDING_VERIFICATION
 }
 
+enum BrokerCode {
+  ZERODHA
+  UPSTOX
+  ANGELONE
+  DHAN
+  FYERS
+}
+
+enum BrokerStatus {
+  CONNECTED
+  DISCONNECTED
+  EXPIRED
+  ERROR
+}
+
+enum AuditAction {
+  USER_LOGIN
+  USER_REGISTER
+  USER_STATUS_CHANGE
+  BROKER_CONNECT
+  BROKER_DISCONNECT
+  STRATEGY_CREATE
+  ORDER_PLACED
+  KILL_SWITCH_TRIGGERED
+}
+
 // -------------------------------------------------------------
 // 1. USERS TABLE
 // -------------------------------------------------------------
 model User {
-  id               String        @id @default(uuid())
+  id               String          @id @default(uuid())
   name             String
-  email            String        @unique
-  phone            String?       @unique
-  passwordHash     String        @map("password_hash")
-  role             UserRole      @default(USER)
-  status           UserStatus    @default(ACTIVE)
-  isEmailVerified  Boolean       @default(false) @map("is_email_verified")
-  isPhoneVerified  Boolean       @default(false) @map("is_phone_verified")
-  twoFactorEnabled Boolean       @default(false) @map("two_factor_enabled")
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
+  email            String          @unique
+  phone            String?         @unique
+  passwordHash     String          @map("password_hash")
+  role             UserRole        @default(USER)
+  status           UserStatus      @default(ACTIVE)
+  isEmailVerified  Boolean         @default(false) @map("is_email_verified")
+  isPhoneVerified  Boolean         @default(false) @map("is_phone_verified")
+  twoFactorEnabled Boolean         @default(false) @map("two_factor_enabled")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
 
   // Relations
   sessions         UserSession[]
+  brokerAccounts   BrokerAccount[]
+  auditLogs        AuditLog[]
 
   @@map("users")
 }
@@ -64,4 +92,53 @@ model UserSession {
 
   @@index([userId])
   @@map("user_sessions")
+}
+
+// -------------------------------------------------------------
+// 3. BROKER ACCOUNTS TABLE (Encrypted credentials at rest)
+// -------------------------------------------------------------
+model BrokerAccount {
+  id                   String       @id @default(uuid())
+  userId               String       @map("user_id")
+  brokerCode           BrokerCode   @map("broker_code")
+  accountRef           String       @map("account_ref") // Client ID (e.g. ZER1234, 458921)
+  apiKeyEncrypted      String?      @map("api_key_encrypted")
+  apiSecretEncrypted   String?      @map("api_secret_encrypted")
+  accessTokenEncrypted String?      @map("access_token_encrypted")
+  tokenExpiresAt       DateTime?    @map("token_expires_at")
+  status               BrokerStatus @default(DISCONNECTED)
+  lastSyncAt           DateTime?    @map("last_sync_at")
+  errorMessage         String?      @map("error_message")
+  metadata             Json?
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+
+  // Relation with User
+  user                 User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, brokerCode, accountRef])
+  @@index([userId])
+  @@map("broker_accounts")
+}
+
+// -------------------------------------------------------------
+// 4. AUDIT LOGS TABLE (Immutable Trail for Operations & Safety)
+// -------------------------------------------------------------
+model AuditLog {
+  id         String      @id @default(uuid())
+  actorId    String?     @map("actor_id")
+  role       UserRole?
+  action     AuditAction
+  entity     String      // e.g. 'USER', 'BROKER_ACCOUNT', 'ORDER'
+  entityId   String?     @map("entity_id")
+  details    Json?       // Snapshot / request metadata
+  ipAddress  String?     @map("ip_address")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  // Relation
+  user       User?       @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([action])
+  @@map("audit_logs")
 }
