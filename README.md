@@ -11,9 +11,11 @@ Backend architecture for a scalable, no-code algorithmic trading and strategy au
 
 ```text
 trading-platform-backend/
+├── prisma/
+│   ├── schema.prisma         # PostgreSQL models & database schema
 ├── src/
-│   ├── config/               # Database connection (db.js) & environment configs
-│   ├── models/               # MongoDB Mongoose schemas (User, Strategy, Order, etc.)
+│   ├── config/               # Database connection (db.js) & Prisma client instance
+│   ├── models/               # Application-level data models / schemas
 │   ├── controllers/
 │   │   ├── user/             # Endpoints for Mobile App & Web User
 │   │   └── admin/            # Endpoints for Admin Panel
@@ -29,7 +31,7 @@ trading-platform-backend/
 │   │   └── brokers/          # Broker adapter interfaces (Zerodha, Upstox, AngelOne, etc.)
 │   ├── utils/                # Helper functions, formatters, validators
 │   ├── app.js                # Express app setup, middlewares, routes mounting
-│   └── server.js             # Server bootstrap & MongoDB connection
+│   └── server.js             # Server bootstrap & PostgreSQL connection
 │
 ├── .env.example              # Environment variables template
 ├── .gitignore                # Files excluded from Git tracking
@@ -43,18 +45,31 @@ trading-platform-backend/
 
 ### 1. Prerequisites
 - [Node.js](https://nodejs.org/) (v18+ or v22+)
-- [MongoDB](https://www.mongodb.com/) (Local Community Server or MongoDB Atlas cloud cluster)
+- [PostgreSQL](https://www.postgresql.org/) (Local installation or Cloud: Supabase / Neon / Render)
 
 ### 2. Setup Environment Variables
 Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-Update your `MONGO_URI` in `.env`:
-- **Local MongoDB**: `mongodb://localhost:27017/algo_trading_platform`
-- **MongoDB Atlas**: `mongodb+srv://<username>:<password>@cluster0.mongodb.net/algo_trading_platform?retryWrites=true&w=majority`
+Update your `DATABASE_URL` in `.env`:
+```env
+DATABASE_URL="postgresql://postgres:password@localhost:5432/trading_platform?schema=public"
+```
 
-### 3. Run Development Server
+### 3. Prisma Commands
+```bash
+# Generate Prisma Client
+npx prisma generate
+
+# Create/apply migrations
+npx prisma migrate dev --name init
+
+# Open Prisma Studio (Database GUI)
+npx prisma studio
+```
+
+### 4. Run Development Server
 ```bash
 # Start with auto-reload (nodemon)
 npm run dev
@@ -63,6 +78,6 @@ npm run dev
 npm start
 ```
 
-### 4. Verify Server
+### 5. Verify Server
 Open browser or Postman and hit:
 - `http://localhost:5000/api/health`

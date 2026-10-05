@@ -1,23 +1,33 @@
-const mongoose = require('mongoose');
+require('dotenv').config();
+const { PrismaClient } = require('@prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
+const { Pool } = require('pg');
+
+const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/trading_platform?schema=public';
+
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+
+const prisma = new PrismaClient({
+  adapter,
+  log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+});
 
 /**
- * Connect to MongoDB database
+ * Connect to PostgreSQL database via Prisma
  */
 const connectDB = async () => {
   try {
-    const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/algo_trading_platform';
-    
-    const conn = await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of hanging
-    });
-
-    console.log(`[MongoDB] Connected successfully: ${conn.connection.host}`);
+    await prisma.$connect();
+    console.log('[PostgreSQL] Database connected successfully via Prisma');
   } catch (error) {
-    console.error(`[MongoDB] Connection error: ${error.message}`);
-    console.log('[MongoDB] If you are using local MongoDB, ensure mongod service is running.');
-    console.log('[MongoDB] If using MongoDB Atlas, update MONGO_URI in .env');
-    // Note: In development, don't crash the server so other routes/healthcheck can still be inspected
+    console.error(`[PostgreSQL] Connection error: ${error.message}`);
+    console.log('[PostgreSQL] Please ensure PostgreSQL is running and DATABASE_URL in .env is correct.');
+    console.log('[PostgreSQL] Example: postgresql://postgres:password@localhost:5432/trading_platform?schema=public');
   }
 };
 
-module.exports = connectDB;
+module.exports = {
+  prisma,
+  connectDB,
+};

@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// -------------------------------------------------------------
+// ENUMS (User Roles & Status)
+// -------------------------------------------------------------
+enum UserRole {
+  USER          // Retail Trader / Client
+  CREATOR       // Strategy Builder / Publisher
+  ADMIN         // Operations / Risk Admin
+  SUPER_ADMIN   // Full Platform Access
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+// -------------------------------------------------------------
+// 1. USERS TABLE
+// -------------------------------------------------------------
+model User {
+  id               String        @id @default(uuid())
+  name             String
+  email            String        @unique
+  phone            String?       @unique
+  passwordHash     String        @map("password_hash")
+  role             UserRole      @default(USER)
+  status           UserStatus    @default(ACTIVE)
+  isEmailVerified  Boolean       @default(false) @map("is_email_verified")
+  isPhoneVerified  Boolean       @default(false) @map("is_phone_verified")
+  twoFactorEnabled Boolean       @default(false) @map("two_factor_enabled")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  sessions         UserSession[]
+
+  @@map("users")
+}
+
+// -------------------------------------------------------------
+// 2. USER SESSIONS TABLE (For JWT Refresh Tokens & Multi-device)
+// -------------------------------------------------------------
+model UserSession {
+  id               String    @id @default(uuid())
+  userId           String    @map("user_id")
+  refreshTokenHash String    @map("refresh_token_hash")
+  deviceInfo       String?   @map("device_info")
+  ipAddress        String?   @map("ip_address")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  // Relation with User
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
+}
