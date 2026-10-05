@@ -47,6 +47,28 @@ const getDashboardStats = async (req, res, next) => {
   }
 };
 
+const getAuditLogs = async (req, res, next) => {
+  try {
+    const logs = await prisma.auditLog.findMany({
+      take: 50,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        actor: {
+          select: { name: true, email: true },
+        },
+      },
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: { logs },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getDashboardStats,
+  getAuditLogs,
 };

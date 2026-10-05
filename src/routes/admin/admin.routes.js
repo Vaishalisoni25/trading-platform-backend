@@ -45,4 +45,8 @@ router.post('/kill-switch', executeEmergencyKillSwitch);
 // Orders Monitor
 router.get('/orders', getAllOrders);
 
+// Audit Logs
+const { getAuditLogs } = require('../../controllers/admin/adminDashboard.controller');
+router.get('/audit-logs', getAuditLogs);
+
 module.exports = router;
